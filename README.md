@@ -12,7 +12,7 @@ profile, and data stores in the selected Wine prefix.
    Use a licensed installation and create a profile. See the
    [Bottles Office setup notes](https://github.com/bottlesdevs/programs/issues/500).
 2. Download `outlook-cli-linux-v0.1.0.tar.gz` and `SHA256SUMS` from
-   [GitHub Releases](https://github.com/harrisonk0/outlook-cli/releases).
+   [GitHub Releases](https://github.com/harrisonk0/outlook-cli-linux/releases).
    On Linux, run these commands in the download directory:
 
    ```sh
