@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+case "${OUTLOOK_ARCH:-x64}" in
+  x64|x86) program="$directory/outlook-${OUTLOOK_ARCH:-x64}.exe" ;;
+  *) echo "OUTLOOK_ARCH must be x64 or x86" >&2; exit 2 ;;
+esac
+if [[ "${1:-}" == --help || $# == 0 ]]; then
+  echo 'Usage: outlook login | exchange-status EMAIL [PROFILE] | batch COMMAND [-- COMMAND ...] | com-check | version | com STEP [...] | folders | inbox | sync [PROFILE] | draft TO SUBJECT BODY | send TO SUBJECT BODY | mapi-check | mapi-stores [PROFILE] | mapi-inbox [PROFILE] | mapi-drafts [PROFILE] | mapi-draft SUBJECT BODY [PROFILE] | mapi-read ENTRYID [PROFILE] | mapi-send TO SUBJECT BODY [PROFILE]'
+  exit 0
+fi
+export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
+export WINEDEBUG="${WINEDEBUG:--all}"
+if [[ "$1" == login ]]; then
+  if [[ $# != 1 ]]; then
+    echo 'Usage: outlook login' >&2
+    exit 2
+  fi
+  if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+    echo 'Outlook sign-in requires a visible desktop for Microsoft sign-in and MFA.' >&2
+    exit 2
+  fi
+  office="${OUTLOOK_EXE:-}"
+  if [[ -z "$office" ]]; then
+    program_files='Program Files'
+    if [[ ${OUTLOOK_ARCH:-x64} == x86 && -d "$WINEPREFIX/drive_c/Program Files (x86)" ]]; then
+      program_files='Program Files (x86)'
+    fi
+    office="$WINEPREFIX/drive_c/$program_files/Microsoft Office/root/Office16/OUTLOOK.EXE"
+  fi
+  if [[ ! -f "$office" ]]; then
+    echo 'Classic Outlook executable is missing. Set OUTLOOK_EXE to its Linux path.' >&2
+    exit 2
+  fi
+  echo 'In Outlook, create or select a profile and complete Microsoft sign-in. Close any existing Outlook session first.' >&2
+  exec "${OUTLOOK_WINE:-wine}" "$office" /profiles
+fi
+if [[ ! -f "$program" ]]; then
+  echo "Missing $program. Run make in $directory." >&2
+  exit 2
+fi
+command=("${OUTLOOK_WINE:-wine}" "$program" "$@")
+if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+  command=(xvfb-run -a "${command[@]}")
+fi
+exec timeout --foreground "${OUTLOOK_TIMEOUT:-60s}" "${command[@]}"
