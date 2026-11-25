@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+touch "$XAUTHORITY"
+xauth -q add "$DISPLAY" MIT-MAGIC-COOKIE-1 "$(openssl rand -hex 16)"
+Xvfb "$DISPLAY" -screen 0 1280x900x24 -nolisten tcp -auth "$XAUTHORITY" &
+xvfb_pid=$!
+trap 'kill "$xvfb_pid" 2>/dev/null || true' EXIT
+for ((i=0; i<100; ++i)); do
+  if xdpyinfo >/dev/null 2>&1; then break; fi
+  kill -0 "$xvfb_pid"
+  sleep .1
+done
+xdpyinfo >/dev/null
+openbox &
+wait "$xvfb_pid"

@@ -222,3 +222,63 @@ make CXX64=x86_64-w64-mingw32-clang++ CXX32=i686-w64-mingw32-clang++
 Run `make dist VERSION=0.1.2` to build the release archive and checksum.
 The archive contains the launcher and both CLI executables. The Windows
 executables must run inside the Wine prefix that contains Outlook.
+
+## Docker setup (experimental)
+
+Use Docker with the Compose plugin on an x86-64 Linux host. This workflow
+packages the CLI, Soda, and a virtual desktop. Allow at least 10 GB for the
+image, temporary downloads, and the Office installation. The image contains
+no Microsoft Office binaries. The first-time installer downloads a pinned
+64-bit Microsoft 365 Apps for enterprise build directly from Microsoft
+and checks its files.
+
+From the repository root:
+
+```sh
+docker compose up --build -d --wait
+docker compose exec outlook desktop
+```
+
+Keep that terminal open. Visit **http://127.0.0.1:6080/vnc.html**, click
+Connect, and enter the temporary password printed in the terminal. Port
+6080 is published on localhost. Set `OUTLOOK_DESKTOP_PORT` before
+`docker compose up` if you need a different host port.
+
+In another terminal, start setup and watch for installer prompts in the
+browser desktop:
+
+```sh
+docker compose exec outlook office-init
+docker compose exec outlook outlook login
+```
+
+If Click-to-Run times out, check the browser desktop for prompts and run
+`docker compose exec outlook office-init --check` before retrying. This checks
+Outlook registration and initializes Extended MAPI. Click-to-Run may still
+report an unfinished installation.
+
+Complete licensing and sign-in directly in Outlook. If Wine opens a browser
+inside the desktop, complete Microsoft's sign-in there. The Microsoft 365
+browser callback and live Exchange login are experimental.
+
+With the account open, verify the connection in another terminal:
+
+```sh
+docker compose exec outlook outlook exchange-status 'you@example.com' 'Work'
+docker compose exec outlook outlook mapi-stores 'Work'
+```
+
+For an offline test profile, close Outlook and run:
+
+```sh
+docker compose exec outlook bash -c '"$OUTLOOK_WINE" "$WINEPREFIX/drive_c/Program Files/Microsoft Office/root/Office16/OUTLOOK.EXE" /PIM OutlookCliTest'
+docker compose exec outlook outlook mapi-stores OutlookCliTest
+```
+
+Once setup is done, stop the `desktop` command with Ctrl+C. Xvfb and the Outlook session
+remain available for commands such as `docker compose exec outlook outlook
+mapi-inbox Work`.
+
+The `outlook-state` volume holds the prefix, verified installer downloads,
+and mailbox data. Keep it private. `docker compose down` keeps the volume.
+Removing the volume also removes your Outlook installation and profile.

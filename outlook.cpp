@@ -700,4 +700,5 @@ int wmain(int argc, wchar_t** argv) {
         std::fprintf(stderr, "outlook: %s\n", error.what());
         return 1;
     }
+    return 0;
 }

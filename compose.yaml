@@ -1,0 +1,18 @@
+services:
+  outlook:
+    build: .
+    platform: linux/amd64
+    ports:
+      - "127.0.0.1:${OUTLOOK_DESKTOP_PORT:-6080}:6080"
+    volumes:
+      - outlook-state:/state
+    shm_size: 256m
+    tmpfs:
+      - /tmp:mode=1777
+    healthcheck:
+      test: ["CMD", "xdpyinfo"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+volumes:
+  outlook-state:

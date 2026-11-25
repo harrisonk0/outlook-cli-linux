@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+if [[ $# -gt 1 || ($# -eq 1 && $1 != --check) ]]; then
+  echo 'Usage: office-init [--check]' >&2
+  exit 2
+fi
+exec 9>/state/office-install.lock
+flock -n 9 || { echo 'Office setup is already running.' >&2; exit 1; }
+
+office="$WINEPREFIX/drive_c/Program Files/Microsoft Office/root/Office16"
+runtime="$WINEPREFIX/drive_c/Program Files/Common Files/Microsoft Shared/ClickToRun"
+wine=$OUTLOOK_WINE
+
+prepare_outlook() {
+  [[ -f "$office/OUTLOOK.EXE" && -f "$office/OLMAPI32.DLL" ]] || return 1
+  "$wine" reg query 'HKCR\Outlook.Application\CLSID' 9>&- >/dev/null || return 1
+  local dll
+  for dll in AppvIsvSubsystems64 C2R64; do
+    if [[ ! -f "$office/$dll.dll" ]]; then
+      install -m 0644 "$runtime/$dll.dll" "$office/$dll.dll" || return 1
+    fi
+  done
+  outlook mapi-check 9>&-
+}
+
+if [[ ${1:-} == --check ]]; then
+  prepare_outlook || { echo 'Outlook files, COM registration, or Extended MAPI are unavailable.' >&2; exit 1; }
+  echo 'Outlook COM is registered and Extended MAPI initializes. Run outlook login to configure a profile.'
+  exit 0
+fi
+
+version=16.0.20625.20142
+channel=492350f6-3a01-4f97-b9c0-c7c6ddf67d60
+cdn="https://officecdn.microsoft.com/pr/$channel"
+media_root=${OFFICE_MEDIA_DIR:-/state/media}
+[[ "$media_root" =~ ^/[a-zA-Z0-9_./-]+$ ]] ||
+  { echo 'OFFICE_MEDIA_DIR must be an absolute container path without spaces.' >&2; exit 2; }
+media="$media_root/Office/Data/$version"
+windows_media="Z:${media_root//\//\\}"
+mkdir -p "$media" /state/media
+
+download() {
+  local url=$1 target=$2 expected=$3
+  if [[ -f "$target" ]] && printf '%s  %s\n' "$expected" "$target" | sha256sum --status -c -; then
+    return
+  fi
+  curl -fL --retry 3 "$url" -o "$target.part"
+  printf '%s  %s\n' "$expected" "$target.part" | sha256sum -c -
+  mv -f -- "$target.part" "$target"
+}
+
+if [[ -f /state/office-installed && -f "$office/OUTLOOK.EXE" ]]; then
+  echo 'Classic Outlook is already installed. Run outlook login to configure a profile.'
+  exit 0
+fi
+
+download "$cdn/Office/Data/v64_$version.cab" "$media_root/Office/Data/v64_$version.cab" \
+  66a9eeb1234a7c5998e96ed70f596dcc364c865e0488e3d9afe9efb23f50abdd
+echo "Downloading Microsoft Office $version. Keep the setup desktop open for installer prompts."
+while read -r digest asset; do
+  download "$cdn/Office/Data/$version/$asset" "$media/$asset" "$digest"
+done <<'CHECKSUMS'
+36ded228e77f1f6706e80b56c37728e5b29ec5d240a95806c2aaf6b53fb25e8d i640.cab
+7978a88fed704d1a584afb5387d28dbf867475008e05d4085d7dbfb45ddcf61a s640.cab
+9c07e162a3ebbb215ddc55b01597c41ee28cbe5bcbc43447bb563aed5f5e8255 s641033.cab
+6d5badac180a01508c419d6237103848195c9010789f473e85fa4a8bd6c624dd stream.x64.x-none.dat
+830b54b1ed9956251a139371756ec1fac24d04a35a9bd1011bf073040d310b14 stream.x64.en-us.dat
+CHECKSUMS
+
+work=$(mktemp -d /state/office-setup.XXXXXX)
+trap 'rm -rf -- "$work"' EXIT
+xml_url=https://download.microsoft.com/download/2/7/7/277681BE-4048-4A58-ABBA-259C465B1699/msxml6-KB2957482-enu-amd64.exe
+download "$xml_url" /state/media/msxml6.exe 260cd870851ffc3c6d10b71691f134e20d8d03ac26073bb36951eacb7aa85897
+cabextract -q -d "$work" /state/media/msxml6.exe
+cabextract -q -d "$work" "$work/msxml6.msi"
+export WINEDLLOVERRIDES='mscoree,mshtml='
+"$wine" wineboot -u 9>&-
+"${wine%/*}/wineserver" -k || true
+"${wine%/*}/wineserver" -w
+shopt -s nullglob
+assemblies=("$WINEPREFIX"/drive_c/windows/winsxs/amd64_microsoft-windows-msxml60*)
+for dll in msxml6 msxml6r; do
+  install -m 0644 "$work/$dll.dll.1ECC0691_D2EB_4A33_9CBF_5487E5CB17DB" "$WINEPREFIX/drive_c/windows/system32/$dll.dll"
+  for assembly in "${assemblies[@]}"; do
+    install -m 0644 "$WINEPREFIX/drive_c/windows/system32/$dll.dll" "$assembly/$dll.dll"
+  done
+done
+export WINEDLLOVERRIDES='mscoree,mshtml=;msxml6=n'
+"$wine" reg add 'HKCU\Software\Wine\DllOverrides' /v msxml6 /t REG_SZ /d native,builtin /f 9>&-
+mkdir -p "$runtime"
+cabextract -q -d "$runtime" "$media/i640.cab"
+if ! "$wine" sc query ClickToRunSvc 9>&- >/dev/null 2>&1; then
+  "$wine" sc create ClickToRunSvc 'binPath=' '"C:\Program Files\Common Files\Microsoft Shared\ClickToRun\OfficeClickToRun.exe" /service' 'start=' auto 9>&-
+fi
+status=0
+timeout "${OFFICE_INSTALL_TIMEOUT:-20m}" "$wine" "$runtime/OfficeClickToRun.exe" \
+    scenario=install platform=x64 culture=en-us lcid=1033 productstoadd=O365ProPlusRetail.16_en-us_x-none \
+    "deliverymechanism=$channel" "cdnbaseurl.16=$cdn" "baseurl.16=$windows_media" "version.16=$version" \
+    mediatype.16=Local sourcetype.16=Local allowcdnfallback=False updatesenabled.16=False \
+    'O365ProPlusRetail.excludedapps.16=access,excel,groove,lync,onedrive,onenote,powerpoint,publisher,teams,word' \
+    displaylevel=True acceptalleulas.16=False 9>&- || status=$?
+if ((status != 0)); then
+  echo 'Click-to-Run did not report completion. Inspect the setup desktop and the Wine user Temp logs.' >&2
+  if prepare_outlook; then
+    echo 'Outlook files and COM registration are present. You can check them with office-init --check before retrying.' >&2
+  fi
+  exit "$status"
+fi
+prepare_outlook ||
+  { echo 'Office setup returned, but Classic Outlook could not be verified.' >&2; exit 1; }
+touch /state/office-installed
+echo 'Classic Outlook is installed. Run outlook login to configure a profile.'

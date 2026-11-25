@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+exec 9>/run/outlook/desktop.lock
+flock -n 9 || { echo 'The setup desktop is already running.' >&2; exit 1; }
+private=$(mktemp -d /run/outlook/desktop.XXXXXX)
+vnc_pid=
+proxy_pid=
+cleanup() {
+  [[ -z "$proxy_pid" ]] || kill "$proxy_pid" 2>/dev/null || true
+  [[ -z "$vnc_pid" ]] || kill "$vnc_pid" 2>/dev/null || true
+  rm -rf -- "$private"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# Classic VNC authentication uses the first eight characters.
+password=$(openssl rand -hex 4)
+printf '%s\n' "$password" >"$private/password"
+x11vnc -display "$DISPLAY" -localhost -rfbport 5900 -forever -shared \
+  -passwdfile "$private/password" -o "$private/x11vnc.log" 9>&- &
+vnc_pid=$!
+for ((i=0; i<50; ++i)); do
+  if grep -q '^PORT=5900' "$private/x11vnc.log" 2>/dev/null; then break; fi
+  kill -0 "$vnc_pid" 2>/dev/null || { cat "$private/x11vnc.log" >&2; exit 1; }
+  sleep .1
+done
+websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 9>&- &
+proxy_pid=$!
+printf 'Open http://127.0.0.1:6080/vnc.html (use your configured host port).\nTemporary VNC password: %s\nStop this command after setup.\n' "$password"
+wait -n "$vnc_pid" "$proxy_pid"
