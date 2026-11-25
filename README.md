@@ -8,20 +8,26 @@ profile, and data stores in the selected Wine prefix.
 ## Quick setup
 
 On a Linux desktop, install Bash, Git, curl, GNU Coreutils, and `file`. For a
-fresh Office installation, have Bottles or Flatpak available.
+fresh Office installation, have Bottles, a working cpak installation, or
+Flatpak and a running system D-Bus service available.
 
 ```sh
-curl -fLO https://raw.githubusercontent.com/harrisonk0/outlook-cli-linux/v0.1.1/setup.sh
+curl -fLO https://raw.githubusercontent.com/harrisonk0/outlook-cli-linux/v0.1.2/setup.sh
 bash setup.sh --install
 ```
 
 The script clones the tagged source into `~/.local/share/outlook-cli` (or
 `$XDG_DATA_HOME/outlook-cli`), downloads and checks the matching CLI build, and
 opens Bottles for Office setup. If Flatpak is available, it offers to install
-Bottles for your user. In Bottles, select its Microsoft 365 installer and
+Bottles for your user. The Office installer may require a development build
+of Bottles and a pre-release Soda runner. See the
+[Bottles compatibility notes](https://github.com/bottlesdevs/programs/issues/500).
+In Bottles, select its Microsoft 365 installer and
 complete Microsoft's licensing and account setup. Return to the script to
 detect the bottle, match its runner and architecture, and run a connection
-check. Office installation and sign-in are interactive.
+check. Office installation and sign-in are interactive. Setup checks the
+system bus before a Flatpak installation and records launcher errors under
+`$XDG_STATE_HOME/outlook-cli` (default `~/.local/state/outlook-cli`).
 
 Already have Classic Outlook? Omit `--install` to detect your existing
 installation. You can give the script an explicit prefix and runner:
@@ -36,14 +42,14 @@ Setup saves the configuration under `$XDG_CONFIG_HOME/outlook-cli` (default
 
 ### Download the release archive
 
-Download `outlook-cli-linux-v0.1.1.tar.gz` and `SHA256SUMS` from
+Download `outlook-cli-linux-v0.1.2.tar.gz` and `SHA256SUMS` from
 [GitHub Releases](https://github.com/harrisonk0/outlook-cli-linux/releases).
 Run these commands in the download directory:
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf outlook-cli-linux-v0.1.1.tar.gz
-cd outlook-cli-linux-v0.1.1
+tar -xzf outlook-cli-linux-v0.1.2.tar.gz
+cd outlook-cli-linux-v0.1.2
 ./outlook setup
 ```
 
@@ -213,6 +219,6 @@ LLVM-MinGW is also supported:
 make CXX64=x86_64-w64-mingw32-clang++ CXX32=i686-w64-mingw32-clang++
 ```
 
-Run `make dist VERSION=0.1.1` to build the release archive and checksum.
+Run `make dist VERSION=0.1.2` to build the release archive and checksum.
 The archive contains the launcher and both CLI executables. The Windows
 executables must run inside the Wine prefix that contains Outlook.

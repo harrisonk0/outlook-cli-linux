@@ -8,7 +8,7 @@ outlook-x64.exe: outlook.cpp
 outlook-x86.exe: outlook.cpp
 	$(CXX32) $(FLAGS) -o $@ $< $(LIBS)
 
-VERSION ?= 0.1.1
+VERSION ?= 0.1.2
 PACKAGE = outlook-cli-linux-v$(VERSION)
 
 .PHONY: all dist

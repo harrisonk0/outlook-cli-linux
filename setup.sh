@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-release=v0.1.1
+release=v0.1.2
 repository=https://github.com/harrisonk0/outlook-cli-linux.git
 directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 if [[ ! -f "$directory/outlook.cpp" && ! -f "$directory/outlook" ]]; then
   directory="${XDG_DATA_HOME:-$HOME/.local/share}/outlook-cli"
   mkdir -p "$(dirname -- "$directory")"
+  if [[ -d "$directory/.git" ]] &&
+     [[ $(git -C "$directory" describe --tags --exact-match HEAD 2>/dev/null || true) != "$release" ]]; then
+    directory="$directory-$release"
+  fi
   if [[ ! -d "$directory/.git" ]]; then
-    git clone --branch "$release" --depth 1 "$repository" "$directory"
+    git -c advice.detachedHead=false clone --branch "$release" --depth 1 "$repository" "$directory"
   fi
   exec bash "$directory/setup.sh" "$@"
 fi
@@ -56,29 +60,68 @@ discover() {
   done
 }
 
-open_bottles() {
-  if command -v bottles >/dev/null; then
-    bottles </dev/null >/dev/null 2>&1 &
-  elif command -v flatpak >/dev/null; then
-    if ! flatpak info com.usebottles.bottles >/dev/null 2>&1; then
-      flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-      flatpak install --user flathub com.usebottles.bottles
-    fi
-    flatpak run com.usebottles.bottles </dev/null >/dev/null 2>&1 &
+check_system_bus() {
+  if command -v gdbus >/dev/null; then
+    gdbus call --system --timeout 3 --dest org.freedesktop.DBus \
+      --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ListNames >/dev/null 2>&1
   else
-    fail 'Install Flatpak or Bottles first. See https://usebottles.com/download/'
+    [[ -n "${DBUS_SYSTEM_BUS_ADDRESS:-}" || -S /run/dbus/system_bus_socket ]]
   fi
 }
+
+open_bottles() {
+  local -a launch
+  if command -v bottles >/dev/null; then
+    launch=(bottles)
+  elif command -v cpak >/dev/null && cpak doctor >"$setup_log" 2>&1; then
+    cpak install -b main github.com/bottlesdevs/bottles ||
+      fail 'cpak could not install Bottles. Check that the cpak storage service is installed and running.'
+    launch=(cpak run -b main github.com/bottlesdevs/bottles bottles)
+  elif command -v flatpak >/dev/null; then
+    local scope=--user
+    if flatpak info --user com.usebottles.bottles >/dev/null 2>&1; then
+      scope=--user
+    elif flatpak info --system com.usebottles.bottles >/dev/null 2>&1; then
+      scope=--system
+    else
+      check_system_bus || fail 'Flatpak needs a working system D-Bus service to install Bottles. Run setup on a Linux desktop with system D-Bus running, or pass --prefix and --runner for existing Outlook.'
+      flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo ||
+        fail 'Flatpak could not add Flathub. See the error above.'
+      flatpak install --user flathub com.usebottles.bottles ||
+        fail 'Flatpak could not install Bottles. See the error above, then rerun setup.'
+    fi
+    launch=(flatpak run "$scope" com.usebottles.bottles)
+  else
+    fail "Install Bottles or Flatpak on a Linux desktop. If cpak is installed, check its host diagnostics at $setup_log. See https://usebottles.com/download/"
+  fi
+
+  "${launch[@]}" </dev/null >"$setup_log" 2>&1 &
+  launch_pid=$!
+  # A desktop launcher can exit successfully after forwarding to an existing process.
+  sleep 2
+  check_bottles_launch
+}
+
+check_bottles_launch() {
+  if ! kill -0 "$launch_pid" 2>/dev/null && ! wait "$launch_pid"; then
+    fail "Bottles failed to start. See $setup_log."
+  fi
+}
+
 discover
 if [[ -z "$prefix" ]] && [[ "$install_office" == true || ${#choices[@]} == 0 ]]; then
   [[ -t 0 && -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] ||
     fail 'No Outlook bottle selected. On a desktop run setup.sh --install, or pass --prefix and --runner.'
+  state=${XDG_STATE_HOME:-$HOME/.local/state}/outlook-cli
+  mkdir -p "$state"
+  setup_log=$(mktemp "$state/bottles.XXXXXX.log")
   open_bottles
   printf '%s\n' 'In Bottles, enable pre-release runners and select a compatible Soda runner.' \
     'Create a Software bottle and install Microsoft 365 from Programs.' \
     'Open Classic Outlook once and finish licensing and account setup.' \
     'Office setup notes: https://github.com/bottlesdevs/programs/issues/500'
   read -r -p 'Press Enter when Outlook is installed. ' _
+  check_bottles_launch
   discover
 fi
 if [[ -z "$prefix" ]]; then
