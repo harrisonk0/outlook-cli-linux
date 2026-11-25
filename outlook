@@ -1,19 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [[ ${1:-} == setup ]]; then
+  shift
+  exec "$directory/setup.sh" "$@"
+fi
+config=${XDG_CONFIG_HOME:-$HOME/.config}/outlook-cli/bottle
+if [[ -r "$config" && -z "${WINEPREFIX:-}" ]]; then
+  mapfile -d '' -t saved < "$config"
+  if [[ ${#saved[@]} == 4 ]]; then
+    export WINEPREFIX="${saved[0]}"
+    export OUTLOOK_WINE="${OUTLOOK_WINE:-${saved[1]}}"
+    export OUTLOOK_ARCH="${OUTLOOK_ARCH:-${saved[2]}}"
+    export OUTLOOK_EXE="${OUTLOOK_EXE:-${saved[3]}}"
+  fi
+fi
 case "${OUTLOOK_ARCH:-x64}" in
   x64|x86) program="$directory/outlook-${OUTLOOK_ARCH:-x64}.exe" ;;
   *) echo "OUTLOOK_ARCH must be x64 or x86" >&2; exit 2 ;;
 esac
 if [[ "${1:-}" == --help || $# == 0 ]]; then
-  echo 'Usage: outlook login | exchange-status EMAIL [PROFILE] | batch COMMAND [-- COMMAND ...] | com-check | version | com STEP [...] | folders | inbox | sync [PROFILE] | draft TO SUBJECT BODY | send TO SUBJECT BODY | mapi-check | mapi-stores [PROFILE] | mapi-inbox [PROFILE] | mapi-drafts [PROFILE] | mapi-draft SUBJECT BODY [PROFILE] | mapi-read ENTRYID [PROFILE] | mapi-send TO SUBJECT BODY [PROFILE]'
+  echo 'Usage: outlook setup | login | exchange-status EMAIL [PROFILE] | batch COMMAND [-- COMMAND ...] | com-check | version | com STEP [...] | folders | inbox | sync [PROFILE] | draft TO SUBJECT BODY | send TO SUBJECT BODY | mapi-check | mapi-stores [PROFILE] | mapi-inbox [PROFILE] | mapi-drafts [PROFILE] | mapi-draft SUBJECT BODY [PROFILE] | mapi-read ENTRYID [PROFILE] | mapi-send TO SUBJECT BODY [PROFILE]'
   exit 0
 fi
 export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
 export WINEDEBUG="${WINEDEBUG:--all}"
 if [[ "$1" == login ]]; then
   if [[ $# != 1 ]]; then
-    echo 'Usage: outlook login' >&2
+    echo 'Usage: outlook setup | login' >&2
     exit 2
   fi
   if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then

@@ -8,13 +8,13 @@ outlook-x64.exe: outlook.cpp
 outlook-x86.exe: outlook.cpp
 	$(CXX32) $(FLAGS) -o $@ $< $(LIBS)
 
-VERSION ?= 0.1.0
+VERSION ?= 0.1.1
 PACKAGE = outlook-cli-linux-v$(VERSION)
 
 .PHONY: all dist
 dist: all
 	install -d dist/$(PACKAGE)
-	install -m 755 outlook outlook-x64.exe outlook-x86.exe dist/$(PACKAGE)/
+	install -m 755 outlook setup.sh outlook-x64.exe outlook-x86.exe dist/$(PACKAGE)/
 	install -m 644 README.md LICENSE dist/$(PACKAGE)/
 	tar -czf dist/$(PACKAGE).tar.gz -C dist $(PACKAGE)
 	cd dist && sha256sum $(PACKAGE).tar.gz > SHA256SUMS

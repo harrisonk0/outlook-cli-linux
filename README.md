@@ -5,27 +5,53 @@ Outlook's COM object model through OLE Automation and calls Outlook's Extended
 MAPI provider directly. It uses the existing Outlook installation, license,
 profile, and data stores in the selected Wine prefix.
 
-## Install
+## Quick setup
 
-1. Install Classic Outlook for Windows in a Wine prefix or a Bottles Software
-   bottle using a compatible Soda runner. Microsoft supplies Outlook separately.
-   Use a licensed installation and create a profile. See the
-   [Bottles Office setup notes](https://github.com/bottlesdevs/programs/issues/500).
-2. Download `outlook-cli-linux-v0.1.0.tar.gz` and `SHA256SUMS` from
-   [GitHub Releases](https://github.com/harrisonk0/outlook-cli-linux/releases).
-   On Linux, run these commands in the download directory:
+On a Linux desktop, install Bash, Git, curl, GNU Coreutils, and `file`. For a
+fresh Office installation, have Bottles or Flatpak available.
 
-   ```sh
-   sha256sum -c SHA256SUMS
-   tar -xzf outlook-cli-linux-v0.1.0.tar.gz
-   cd outlook-cli-linux-v0.1.0
-   ```
+```sh
+curl -fLO https://raw.githubusercontent.com/harrisonk0/outlook-cli-linux/v0.1.1/setup.sh
+bash setup.sh --install
+```
 
-3. Configure the launcher as shown below. Linux needs Bash and GNU Coreutils.
-   Install Xvfb and xauth if you will run without a desktop display. For an
-   offline test profile, start Classic Outlook once with `/PIM OutlookCliTest`.
+The script clones the tagged source into `~/.local/share/outlook-cli` (or
+`$XDG_DATA_HOME/outlook-cli`), downloads and checks the matching CLI build, and
+opens Bottles for Office setup. If Flatpak is available, it offers to install
+Bottles for your user. In Bottles, select its Microsoft 365 installer and
+complete Microsoft's licensing and account setup. Return to the script to
+detect the bottle, match its runner and architecture, and run a connection
+check. Office installation and sign-in are interactive.
 
-## Connect to a bottle
+Already have Classic Outlook? Omit `--install` to detect your existing
+installation. You can give the script an explicit prefix and runner:
+
+```sh
+bash setup.sh --prefix '/path/to/bottle' --runner '/path/to/runner/bin/wine'
+```
+
+Setup saves the configuration under `$XDG_CONFIG_HOME/outlook-cli` (default
+`~/.config/outlook-cli`). You can then run
+`~/.local/share/outlook-cli/outlook mapi-stores` on a default installation.
+
+### Download the release archive
+
+Download `outlook-cli-linux-v0.1.1.tar.gz` and `SHA256SUMS` from
+[GitHub Releases](https://github.com/harrisonk0/outlook-cli-linux/releases).
+Run these commands in the download directory:
+
+```sh
+sha256sum -c SHA256SUMS
+tar -xzf outlook-cli-linux-v0.1.1.tar.gz
+cd outlook-cli-linux-v0.1.1
+./outlook setup
+```
+
+For headless use, install Xvfb and xauth. For an offline test profile, start
+Classic Outlook once with `/PIM OutlookCliTest`. The release includes the CLI
+and its setup script. Microsoft provides Classic Outlook separately.
+
+## Manual configuration
 
 Use the bottle's prefix and matching runner. Set `OUTLOOK_ARCH=x86` for 32-bit
 Outlook. The CLI defaults to x64. MAPI requires the same architecture as Outlook.
@@ -187,6 +213,6 @@ LLVM-MinGW is also supported:
 make CXX64=x86_64-w64-mingw32-clang++ CXX32=i686-w64-mingw32-clang++
 ```
 
-Run `make dist VERSION=0.1.0` to build the release archive and checksum.
+Run `make dist VERSION=0.1.1` to build the release archive and checksum.
 The archive contains the launcher and both CLI executables. The Windows
 executables must run inside the Wine prefix that contains Outlook.
